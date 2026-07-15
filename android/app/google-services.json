@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "644438329073",
+    "project_id": "home-75c32",
+    "storage_bucket": "home-75c32.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:644438329073:android:82175e79fbfffc34c0cb50",
+        "android_client_info": {
+          "package_name": "com.example.glazia_home_secure_app"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyDDRWEWfN787BbWC67SKSfvodndkdHCWVs"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
