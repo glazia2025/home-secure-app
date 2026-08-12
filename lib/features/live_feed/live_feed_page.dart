@@ -1,9 +1,8 @@
 import 'dart:async';
-import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
-import 'package:http/http.dart' as http;
+import 'package:flutter_webrtc/flutter_webrtc.dart';
 
 import '../../app/app_colors.dart';
 import '../../data/app_repository.dart';
@@ -21,148 +20,198 @@ class LiveFeedPage extends StatefulWidget {
 }
 
 class _LiveFeedPageState extends State<LiveFeedPage> {
-  Uri? _streamUri;
-  Uint8List? _frame;
-  http.Client? _streamClient;
-  StreamSubscription<List<int>>? _streamSubscription;
+  final RTCVideoRenderer _renderer = RTCVideoRenderer();
+  LiveFeedSignalingSession? _signaling;
+  StreamSubscription<Map<String, dynamic>>? _signalSubscription;
+  RTCPeerConnection? _peerConnection;
+  final List<RTCIceCandidate> _pendingCandidates = <RTCIceCandidate>[];
   Object? _error;
-  bool _loading = true;
+  String _status = 'connecting';
+  bool _remoteDescriptionSet = false;
   bool _disposed = false;
-  bool _collectingFrame = false;
-  int _previousByte = -1;
   int _connectionGeneration = 0;
-  List<int> _frameBuffer = <int>[];
 
   @override
   void initState() {
     super.initState();
-    _connect();
+    unawaited(_initialise());
+  }
+
+  Future<void> _initialise() async {
+    await _renderer.initialize();
+    if (!_disposed) await _connect();
   }
 
   @override
   void dispose() {
     _disposed = true;
-    _closeStream();
+    unawaited(_closeConnection());
+    unawaited(_renderer.dispose());
     super.dispose();
   }
 
   Future<void> _connect() async {
     final generation = ++_connectionGeneration;
-    _closeStream();
+    final repository = context.read<AppRepository>();
+    await _closeConnection();
+    if (!mounted || generation != _connectionGeneration) return;
     setState(() {
-      _loading = true;
       _error = null;
-      _streamUri = null;
-      _frame = null;
+      _status = 'connecting';
     });
 
     try {
-      final uri = await context.read<AppRepository>().mjpegLiveFeedUri(
-        widget.home,
-      );
-      if (!mounted) return;
-      setState(() {
-        _streamUri = uri;
+      final peer = await createPeerConnection(<String, dynamic>{
+        'iceServers': <Map<String, dynamic>>[
+          <String, dynamic>{
+            'urls': <String>['stun:stun.l.google.com:19302'],
+          },
+        ],
+        'sdpSemantics': 'unified-plan',
       });
-      await _openMjpegStream(uri, generation);
+      if (_disposed || generation != _connectionGeneration) {
+        await peer.close();
+        return;
+      }
+      _peerConnection = peer;
+      await peer.addTransceiver(
+        kind: RTCRtpMediaType.RTCRtpMediaTypeVideo,
+        init: RTCRtpTransceiverInit(direction: TransceiverDirection.RecvOnly),
+      );
+
+      peer.onTrack = (RTCTrackEvent event) {
+        if (_disposed || generation != _connectionGeneration) return;
+        final stream = event.streams.isNotEmpty ? event.streams.first : null;
+        if (stream != null) _renderer.srcObject = stream;
+      };
+      peer.onIceCandidate = (RTCIceCandidate candidate) {
+        if (candidate.candidate == null || candidate.candidate!.isEmpty) return;
+        _signaling?.send(<String, dynamic>{
+          'type': 'ice-candidate',
+          'candidate': candidate.toMap(),
+        });
+      };
+      peer.onConnectionState = (RTCPeerConnectionState state) {
+        if (!mounted || _disposed || generation != _connectionGeneration) {
+          return;
+        }
+        setState(() {
+          switch (state) {
+            case RTCPeerConnectionState.RTCPeerConnectionStateConnected:
+              _status = 'live';
+            case RTCPeerConnectionState.RTCPeerConnectionStateFailed:
+              _status = 'offline';
+              _error = 'WebRTC connection failed';
+            case RTCPeerConnectionState.RTCPeerConnectionStateDisconnected:
+              _status = 'offline';
+            default:
+              break;
+          }
+        });
+      };
+
+      final signaling = await repository.liveFeedSignalingSession(widget.home);
+      if (_disposed || generation != _connectionGeneration) {
+        await signaling.close();
+        return;
+      }
+      _signaling = signaling;
+      _signalSubscription = signaling.messages.listen(
+        (message) => _handleSignal(message, generation),
+        onError: (Object error) => _setFailure(error, generation),
+        onDone: () => _setFailure('Signaling connection closed', generation),
+        cancelOnError: true,
+      );
     } catch (error) {
-      if (!mounted || generation != _connectionGeneration) return;
-      setState(() {
-        _error = error;
-        _loading = false;
-      });
+      _setFailure(error, generation);
     }
   }
 
-  Future<void> _openMjpegStream(Uri uri, int generation) async {
-    final client = http.Client();
-    _streamClient = client;
-
-    final request = http.Request('GET', uri);
-    final response = await client.send(request);
-    if (response.statusCode < 200 || response.statusCode >= 300) {
-      throw Exception(
-        'Camera stream failed with status ${response.statusCode}',
-      );
-    }
-
-    _streamSubscription = response.stream.listen(
-      (chunk) => _handleStreamChunk(chunk, generation),
-      onError: (Object error) {
-        if (!mounted || _disposed || generation != _connectionGeneration) {
-          return;
-        }
-        setState(() {
-          _error = error;
-          _loading = false;
-        });
-      },
-      onDone: () {
-        if (!mounted || _disposed || generation != _connectionGeneration) {
-          return;
-        }
-        setState(() {
-          _error ??= 'Camera stream closed';
-          _loading = false;
-        });
-      },
-      cancelOnError: true,
-    );
-  }
-
-  void _handleStreamChunk(List<int> chunk, int generation) {
-    if (generation != _connectionGeneration) return;
-    for (final byte in chunk) {
-      if (!_collectingFrame) {
-        if (_previousByte == 0xff && byte == 0xd8) {
-          _collectingFrame = true;
-          _frameBuffer = <int>[0xff, 0xd8];
-        }
-        _previousByte = byte;
-        continue;
+  Future<void> _handleSignal(
+    Map<String, dynamic> message,
+    int generation,
+  ) async {
+    if (_disposed || generation != _connectionGeneration) return;
+    try {
+      switch (message['type']) {
+        case 'ready':
+        case 'status':
+          if (message['status'] == 'offline' && mounted) {
+            setState(() => _status = 'waiting');
+          }
+        case 'offer':
+          final sdp = _map(message['sdp']);
+          final peer = _peerConnection;
+          if (peer == null || sdp == null) return;
+          await peer.setRemoteDescription(
+            RTCSessionDescription(
+              sdp['sdp'] as String?,
+              sdp['type'] as String?,
+            ),
+          );
+          _remoteDescriptionSet = true;
+          for (final candidate in _pendingCandidates) {
+            await peer.addCandidate(candidate);
+          }
+          _pendingCandidates.clear();
+          final answer = await peer.createAnswer(<String, dynamic>{});
+          await peer.setLocalDescription(answer);
+          _signaling?.send(<String, dynamic>{
+            'type': 'answer',
+            'sdp': answer.toMap(),
+          });
+          if (mounted) setState(() => _status = 'connecting');
+        case 'ice-candidate':
+          final json = _map(message['candidate']);
+          if (json == null) return;
+          final candidate = RTCIceCandidate(
+            json['candidate'] as String?,
+            json['sdpMid'] as String?,
+            (json['sdpMLineIndex'] as num?)?.toInt(),
+          );
+          if (_remoteDescriptionSet) {
+            await _peerConnection?.addCandidate(candidate);
+          } else {
+            _pendingCandidates.add(candidate);
+          }
+        case 'error':
+          _setFailure(
+            message['message'] ?? 'WebRTC signaling failed',
+            generation,
+          );
       }
-
-      _frameBuffer.add(byte);
-      if (_frameBuffer.length > 400 * 1024) {
-        _resetFrameParser(byte);
-        continue;
-      }
-
-      if (_previousByte == 0xff && byte == 0xd9) {
-        final frame = Uint8List.fromList(_frameBuffer);
-        _resetFrameParser(byte);
-        if (!mounted || _disposed || generation != _connectionGeneration) {
-          return;
-        }
-        setState(() {
-          _frame = frame;
-          _loading = false;
-          _error = null;
-        });
-        continue;
-      }
-      _previousByte = byte;
+    } catch (error) {
+      _setFailure(error, generation);
     }
   }
 
-  void _resetFrameParser(int previousByte) {
-    _collectingFrame = false;
-    _frameBuffer = <int>[];
-    _previousByte = previousByte;
+  Map<String, dynamic>? _map(dynamic value) {
+    return value is Map ? Map<String, dynamic>.from(value) : null;
   }
 
-  void _closeStream() {
-    _streamSubscription?.cancel();
-    _streamSubscription = null;
-    _streamClient?.close();
-    _streamClient = null;
-    _resetFrameParser(-1);
+  void _setFailure(Object error, int generation) {
+    if (!mounted || _disposed || generation != _connectionGeneration) return;
+    setState(() {
+      _error = error;
+      _status = 'offline';
+    });
+  }
+
+  Future<void> _closeConnection() async {
+    await _signalSubscription?.cancel();
+    _signalSubscription = null;
+    await _signaling?.close();
+    _signaling = null;
+    _renderer.srcObject = null;
+    await _peerConnection?.close();
+    _peerConnection = null;
+    _pendingCandidates.clear();
+    _remoteDescriptionSet = false;
   }
 
   @override
   Widget build(BuildContext context) {
-    final isLive = _streamUri != null && !_loading && _error == null;
-
+    final isLive = _status == 'live';
     return Scaffold(
       appBar: AppBar(title: const Text('Main Door Live Feed')),
       body: ListView(
@@ -185,33 +234,28 @@ class _LiveFeedPageState extends State<LiveFeedPage> {
                         ),
                       ),
                     ),
-                    StatusPill(label: isLive ? 'online' : 'offline'),
+                    StatusPill(label: isLive ? 'online' : _status),
                   ],
                 ),
                 const SizedBox(height: 14),
-                AnimatedContainer(
-                  duration: const Duration(milliseconds: 260),
-                  curve: Curves.easeOut,
-                  clipBehavior: Clip.antiAlias,
-                  decoration: BoxDecoration(
-                    color: Colors.black,
-                    borderRadius: BorderRadius.circular(22),
-                    border: Border.all(color: AppColors.border),
-                  ),
+                ClipRRect(
+                  borderRadius: BorderRadius.circular(22),
                   child: AspectRatio(
                     aspectRatio: 4 / 3,
                     child: Stack(
                       fit: StackFit.expand,
                       children: [
-                        if (_frame != null)
-                          Image.memory(
-                            _frame!,
-                            fit: BoxFit.cover,
-                            gaplessPlayback: false,
+                        ColoredBox(
+                          color: Colors.black,
+                          child: RTCVideoView(
+                            _renderer,
+                            objectFit: RTCVideoViewObjectFit
+                                .RTCVideoViewObjectFitCover,
                           ),
-                        if (_loading || _frame == null)
+                        ),
+                        if (!isLive)
                           _WaitingFeed(
-                            status: _loading ? 'connecting' : 'offline',
+                            status: _status,
                             message: _error?.toString(),
                           ),
                       ],
@@ -233,10 +277,10 @@ class _LiveFeedPageState extends State<LiveFeedPage> {
             ),
           ),
           SectionCard(
-            title: 'ESP32 MJPEG stream',
+            title: 'ESP32 WebRTC stream',
             icon: Icons.memory_outlined,
             child: Text(
-              'The app opens an MJPEG stream from the backend. The ESP32 sends JPEG frames as binary messages over /api/device/hubs/control/ws.',
+              'The ESP32 sends video directly to this device over WebRTC. The backend WebSocket is used only to authenticate and exchange SDP and ICE candidates.',
               style: Theme.of(context).textTheme.bodyMedium?.copyWith(
                 color: AppColors.mutedText,
                 height: 1.4,
@@ -251,7 +295,6 @@ class _LiveFeedPageState extends State<LiveFeedPage> {
 
 class _WaitingFeed extends StatelessWidget {
   const _WaitingFeed({required this.status, this.message});
-
   final String status;
   final String? message;
 
@@ -272,9 +315,9 @@ class _WaitingFeed extends StatelessWidget {
               ),
               const SizedBox(height: 12),
               Text(
-                status == 'connecting'
-                    ? 'Connecting to MJPEG camera...'
-                    : 'Waiting for ESP32 MJPEG stream',
+                status == 'waiting'
+                    ? 'Waiting for the ESP32 camera'
+                    : 'Connecting WebRTC video...',
                 textAlign: TextAlign.center,
                 style: const TextStyle(
                   color: AppColors.text,

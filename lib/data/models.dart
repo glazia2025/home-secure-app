@@ -246,6 +246,7 @@ class Sensor {
   const Sensor({
     required this.id,
     required this.macAddress,
+    required this.identifierType,
     required this.name,
     required this.type,
     required this.zone,
@@ -259,6 +260,7 @@ class Sensor {
     return Sensor(
       id: json['id'] as String? ?? '',
       macAddress: json['macAddress'] as String? ?? '',
+      identifierType: json['identifierType'] as String? ?? 'mac',
       name: json['name'] as String? ?? '',
       type: json['type'] as String? ?? '',
       zone: json['zone'] as String? ?? '',
@@ -273,6 +275,7 @@ class Sensor {
 
   final String id;
   final String macAddress;
+  final String identifierType;
   final String name;
   final String type;
   final String zone;

@@ -38,14 +38,6 @@ class ApiClient {
     );
   }
 
-  Uri cameraStreamUri(String streamPath) {
-    final uri = Uri.parse(baseUrl);
-    return uri.replace(
-      path: streamPath,
-      queryParameters: {'t': DateTime.now().millisecondsSinceEpoch.toString()},
-    );
-  }
-
   Map<String, String> _headers([String? token]) {
     return {
       'Content-Type': 'application/json',
@@ -278,22 +270,6 @@ class ApiClient {
     final command = body['command'];
     if (command is! Map<String, dynamic>) return null;
     return DoorLockCommand.fromJson(command);
-  }
-
-  Future<String> createCameraStreamPath({
-    required String token,
-    required String homeId,
-  }) async {
-    final response = await _http.post(
-      _uri('/homes/$homeId/camera/stream-token'),
-      headers: _headers(token),
-    );
-    final body = await _decode(response);
-    final streamPath = body['streamPath'] as String? ?? '';
-    if (streamPath.isEmpty) {
-      throw const ApiException('Camera stream path missing');
-    }
-    return streamPath;
   }
 
   Future<List<AppNotification>> notifications(String token) async {

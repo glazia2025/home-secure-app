@@ -54,12 +54,14 @@ class _SensorPairingViewState extends State<SensorPairingView> {
   );
   final _zoneController = TextEditingController(text: 'Front Door Frame');
   StreamSubscription<List<ScanResult>>? _scanSubscription;
+  Timer? _pairingPollTimer;
   final List<ScanResult> _bleDevices = [];
   ScanResult? _selectedBleDevice;
   int _currentStep = 0;
   bool _isScanningBle = false;
   bool _isProvisioningBle = false;
   bool _provisioningSent = false;
+  bool _threadSensorPaired = false;
 
   @override
   void dispose() {
@@ -67,6 +69,7 @@ class _SensorPairingViewState extends State<SensorPairingView> {
     _nameController.dispose();
     _zoneController.dispose();
     _scanSubscription?.cancel();
+    _pairingPollTimer?.cancel();
     FlutterBluePlus.stopScan();
     super.dispose();
   }
@@ -110,7 +113,7 @@ class _SensorPairingViewState extends State<SensorPairingView> {
       return;
     }
 
-    if (_provisioningSent) {
+    if (_provisioningSent || state.result?.sensor.identifierType == 'eui64') {
       Navigator.of(context).pop();
       return;
     }
@@ -132,8 +135,16 @@ class _SensorPairingViewState extends State<SensorPairingView> {
       listenWhen: (previous, current) => previous.status != current.status,
       listener: (context, state) {
         if (state.status == SensorPairingStatus.success) {
-          AppToast.show(context, 'Select sensor over Bluetooth');
-          _startBleScan();
+          if (state.result?.sensor.identifierType == 'eui64') {
+            AppToast.show(
+              context,
+              'Waiting for the hub to commission the sensor',
+            );
+            _startThreadPairingPoll(state.result!.sensor.id);
+          } else {
+            AppToast.show(context, 'Select sensor over Bluetooth');
+            _startBleScan();
+          }
         }
         if (state.status == SensorPairingStatus.failure) {
           setState(() => _currentStep = 1);
@@ -166,14 +177,16 @@ class _SensorPairingViewState extends State<SensorPairingView> {
                               ? null
                               : details.onStepContinue,
                           icon: isLastStep
-                              ? _provisioningSent
+                              ? _provisioningSent ||
+                                        result?.sensor.identifierType == 'eui64'
                                     ? Icons.check
                                     : Icons.bluetooth_connected
                               : _currentStep == 1
                               ? Icons.add_link_outlined
                               : Icons.arrow_forward,
                           label: isLastStep
-                              ? _provisioningSent
+                              ? _provisioningSent ||
+                                        result?.sensor.identifierType == 'eui64'
                                     ? 'Done'
                                     : 'Send to sensor'
                               : _currentStep == 1
@@ -227,7 +240,7 @@ class _SensorPairingViewState extends State<SensorPairingView> {
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         Text(
-                          'Scan the QR printed on the frame sensor. The sensor MAC address is required.',
+                          'Scan the QR printed on the frame sensor. Its sensor ID (EUI-64) is required.',
                           style: Theme.of(context).textTheme.bodyMedium,
                         ),
                         const SizedBox(height: 16),
@@ -241,12 +254,12 @@ class _SensorPairingViewState extends State<SensorPairingView> {
                           controller: _sensorMacController,
                           readOnly: true,
                           decoration: const InputDecoration(
-                            labelText: 'Sensor MAC address',
+                            labelText: 'Sensor ID',
                             prefixIcon: Icon(Icons.qr_code_scanner),
                           ),
                           validator: (value) =>
                               value == null || value.trim().isEmpty
-                              ? 'Sensor MAC is required'
+                              ? 'Sensor ID is required'
                               : null,
                         ),
                         const SizedBox(height: 12),
@@ -278,7 +291,7 @@ class _SensorPairingViewState extends State<SensorPairingView> {
                   ),
                 ),
                 Step(
-                  title: const Text('BLE'),
+                  title: const Text('Join'),
                   isActive: _currentStep >= 2,
                   state: result != null
                       ? StepState.complete
@@ -288,13 +301,33 @@ class _SensorPairingViewState extends State<SensorPairingView> {
                     children: [
                       Text(
                         result == null
-                            ? 'Creating sensor provisioning payload...'
+                            ? 'Creating sensor pairing request...'
+                            : result.sensor.identifierType == 'eui64'
+                            ? _threadSensorPaired
+                                  ? 'Sensor joined the Thread network successfully.'
+                                  : 'Place the sensor near the hub. The hub will commission it onto the Thread network automatically.'
                             : 'Select the sensor Bluetooth device, then send its hub pairing credentials over BLE.',
                       ),
                       const SizedBox(height: 16),
                       if (result == null)
                         const Center(child: CircularProgressIndicator())
-                      else ...[
+                      else if (result.sensor.identifierType == 'eui64') ...[
+                        Center(
+                          child: _threadSensorPaired
+                              ? const Icon(
+                                  Icons.check_circle,
+                                  color: AppColors.accent,
+                                  size: 44,
+                                )
+                              : const CircularProgressIndicator(),
+                        ),
+                        const SizedBox(height: 16),
+                        Text(
+                          _threadSensorPaired
+                              ? 'Pairing confirmed by the hub.'
+                              : 'Waiting for pairing confirmation from the hub…',
+                        ),
+                      ] else ...[
                         _SensorBleDevicePicker(
                           devices: _bleDevices,
                           selectedDevice: _selectedBleDevice,
@@ -331,6 +364,29 @@ class _SensorPairingViewState extends State<SensorPairingView> {
         ),
       ),
     );
+  }
+
+  void _startThreadPairingPoll(String sensorId) {
+    _pairingPollTimer?.cancel();
+    _pairingPollTimer = Timer.periodic(const Duration(seconds: 2), (_) async {
+      try {
+        final homes = await context.read<AppRepository>().homes();
+        final sensors = homes
+            .where((home) => home.id == widget.home.id)
+            .expand((home) => home.sensors);
+        final paired = sensors.any(
+          (sensor) =>
+              sensor.id == sensorId &&
+              const {'paired', 'online'}.contains(sensor.status),
+        );
+        if (!mounted || !paired) return;
+        _pairingPollTimer?.cancel();
+        setState(() => _threadSensorPaired = true);
+        AppToast.show(context, 'Sensor paired successfully');
+      } catch (_) {
+        // Keep waiting; transient refresh failures should not abort commissioning.
+      }
+    });
   }
 
   Future<void> _startBleScan() async {

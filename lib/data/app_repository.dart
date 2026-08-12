@@ -247,16 +247,6 @@ class AppRepository {
     );
   }
 
-  Future<Uri> mjpegLiveFeedUri(Home home) async {
-    final savedToken = await _requireToken();
-    final client = await apiClient();
-    final streamPath = await client.createCameraStreamPath(
-      token: savedToken,
-      homeId: home.id,
-    );
-    return client.cameraStreamUri(streamPath);
-  }
-
   Future<HubRuleSettings> hubRuleSettings(Home home) async {
     final preferences = await _preferencesFuture;
     final raw = preferences.getString('$hubRulesPrefix:${home.hub.id}');
