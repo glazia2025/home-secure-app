@@ -24,7 +24,9 @@ class SensorPairingBloc extends Bloc<SensorPairingEvent, SensorPairingState> {
     try {
       final result = await _repository.pairSensor(
         home: event.home,
-        sensorMacAddress: event.sensorMacAddress,
+        eui: event.eui,
+        cc: event.cc,
+        v: event.v,
         name: event.name,
         zone: event.zone,
       );

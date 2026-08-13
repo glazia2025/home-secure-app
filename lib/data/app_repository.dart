@@ -149,7 +149,9 @@ class AppRepository {
 
   Future<PairSensorResult> pairSensor({
     required Home home,
-    required String sensorMacAddress,
+    required String eui,
+    required String cc,
+    required String v,
     required String name,
     required String zone,
   }) async {
@@ -158,7 +160,9 @@ class AppRepository {
     return client.pairSensor(
       token: savedToken,
       homeId: home.id,
-      sensorMacAddress: sensorMacAddress,
+      eui: eui,
+      cc: cc,
+      v: v,
       name: name,
       zone: zone,
     );

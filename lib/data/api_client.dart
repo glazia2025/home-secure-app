@@ -188,7 +188,9 @@ class ApiClient {
   Future<PairSensorResult> pairSensor({
     required String token,
     required String homeId,
-    required String sensorMacAddress,
+    required String eui,
+    required String cc,
+    required String v,
     required String name,
     required String zone,
     String type = 'contact',
@@ -197,7 +199,9 @@ class ApiClient {
       _uri('/homes/$homeId/sensors/pair'),
       headers: _headers(token),
       body: jsonEncode({
-        'sensorMacAddress': sensorMacAddress,
+        'eui': eui,
+        'cc': cc,
+        'v': v,
         'name': name,
         'type': type,
         'zone': zone,

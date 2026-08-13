@@ -260,7 +260,7 @@ class Sensor {
     return Sensor(
       id: json['id'] as String? ?? '',
       macAddress: json['macAddress'] as String? ?? '',
-      identifierType: json['identifierType'] as String? ?? 'mac',
+      identifierType: 'eui64',
       name: json['name'] as String? ?? '',
       type: json['type'] as String? ?? '',
       zone: json['zone'] as String? ?? '',

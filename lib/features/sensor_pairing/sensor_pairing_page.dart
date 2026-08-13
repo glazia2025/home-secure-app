@@ -62,6 +62,8 @@ class _SensorPairingViewState extends State<SensorPairingView> {
   bool _isProvisioningBle = false;
   bool _provisioningSent = false;
   bool _threadSensorPaired = false;
+  String _threadCc = '';
+  String _threadV = '';
 
   @override
   void dispose() {
@@ -83,6 +85,8 @@ class _SensorPairingViewState extends State<SensorPairingView> {
     final parsed = SensorQrPayload.parse(payload);
     setState(() {
       _sensorMacController.text = parsed.macAddress;
+      _threadCc = parsed.cc;
+      _threadV = parsed.v;
       if (parsed.name.isNotEmpty) _nameController.text = parsed.name;
       if (parsed.zone.isNotEmpty) _zoneController.text = parsed.zone;
     });
@@ -93,7 +97,9 @@ class _SensorPairingViewState extends State<SensorPairingView> {
     context.read<SensorPairingBloc>().add(
       SensorPairingSubmitted(
         home: widget.home,
-        sensorMacAddress: _sensorMacController.text.trim(),
+        eui: _sensorMacController.text.trim(),
+        cc: _threadCc,
+        v: _threadV,
         name: _nameController.text.trim(),
         zone: _zoneController.text.trim(),
       ),
@@ -811,14 +817,38 @@ class SensorQrPayload {
     required this.macAddress,
     required this.name,
     required this.zone,
+    this.cc = '',
+    this.v = '',
   });
 
   final String macAddress;
   final String name;
   final String zone;
+  final String cc;
+  final String v;
 
   static SensorQrPayload parse(String raw) {
     final trimmed = raw.trim();
+    // Thread Joiner QR: v=1&&eui=<16-hex>&&cc=<PSKd>
+    if (trimmed.startsWith('v=1&&')) {
+      final fields = <String, String>{};
+      for (final part in trimmed.split('&&')) {
+        final separator = part.indexOf('=');
+        if (separator < 0) continue;
+        fields[part.substring(0, separator)] = part.substring(separator + 1);
+      }
+      final eui64 = (fields['eui'] ?? '').trim().toUpperCase();
+      final pskd = (fields['cc'] ?? '').trim().toUpperCase();
+      if (RegExp(r'^[A-F0-9]{16}$').hasMatch(eui64) && pskd.isNotEmpty) {
+        return SensorQrPayload(
+          macAddress: eui64,
+          name: '',
+          zone: '',
+          cc: pskd,
+          v: fields['v'] ?? '1',
+        );
+      }
+    }
     try {
       final decoded = jsonDecode(trimmed);
       if (decoded is Map<String, dynamic>) {
