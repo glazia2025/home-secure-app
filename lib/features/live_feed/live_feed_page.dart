@@ -66,6 +66,16 @@ class _LiveFeedPageState extends State<LiveFeedPage> {
           <String, dynamic>{
             'urls': <String>['stun:stun.l.google.com:19302'],
           },
+          <String, dynamic>{
+            'urls': <String>['turn:13.51.196.176:3478'],
+            'username': 'xio',
+            'credential': 'xio@1234',
+          },
+          <String, dynamic>{
+            'urls': <String>['turns:home-secure.glazia.in:5349'],
+            'username': 'xio',
+            'credential': 'xio@1234',
+          },
         ],
         'sdpSemantics': 'unified-plan',
       });
