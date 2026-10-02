@@ -672,14 +672,14 @@ class _BleProvisioningSuccessBanner extends StatelessWidget {
       width: double.infinity,
       padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
-        color: const Color(0xFF0F3D2A),
+        color: AppColors.success.withValues(alpha: 0.18),
         borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: const Color(0xFF2ED47A)),
+        border: Border.all(color: AppColors.success),
       ),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Icon(Icons.check_circle_outline, color: Color(0xFF7DDE9E)),
+          const Icon(Icons.check_circle_outline, color: AppColors.success),
           const SizedBox(width: 10),
           Expanded(child: Text(message)),
         ],

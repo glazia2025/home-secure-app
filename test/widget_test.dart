@@ -7,10 +7,10 @@ void main() {
     SharedPreferences.setMockInitialValues({});
 
     await tester.pumpWidget(const GlaziaHomeSecureApp());
-    await tester.pump();
+    await tester.pumpAndSettle(const Duration(seconds: 6));
 
-    expect(find.text('Glazia Home Secure'), findsOneWidget);
-    expect(find.text('Phone number'), findsOneWidget);
+    expect(find.text('Sign in'), findsOneWidget);
+    expect(find.text('PHONE NUMBER'), findsOneWidget);
     expect(find.text('Send OTP'), findsOneWidget);
     expect(find.text('Backend URL'), findsNothing);
   });

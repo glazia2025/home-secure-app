@@ -1,10 +1,15 @@
+import 'dart:ui';
+
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 
 import '../../app/app_colors.dart';
 import '../../blocs/auth/auth_bloc.dart';
-import '../../shared/widgets/app_button.dart';
-import '../../shared/widgets/cards.dart';
+
+const _pageBackground = AppColors.background;
+const _textPrimary = AppColors.text;
+const _textSecondary = AppColors.secondaryText;
 
 class AuthPage extends StatefulWidget {
   const AuthPage({super.key});
@@ -18,7 +23,6 @@ class _AuthPageState extends State<AuthPage> {
   final _otpController = TextEditingController();
   final _nameController = TextEditingController();
   final _emailController = TextEditingController();
-  String? _validationError;
 
   @override
   void dispose() {
@@ -32,20 +36,16 @@ class _AuthPageState extends State<AuthPage> {
   void _requestOtp() {
     final phone = _phoneController.text.trim();
     if (phone.isEmpty) {
-      setState(() => _validationError = 'Phone number is required');
       return;
     }
-    setState(() => _validationError = null);
     context.read<AuthBloc>().add(AuthOtpRequested(phone));
   }
 
   void _verifyOtp(AuthState state) {
     final otp = _otpController.text.trim();
-    if (otp.length < 4) {
-      setState(() => _validationError = 'Enter a valid OTP');
+    if (otp.length != 6) {
       return;
     }
-    setState(() => _validationError = null);
     context.read<AuthBloc>().add(
       AuthOtpVerified(phoneNumber: state.phoneNumber, otp: otp),
     );
@@ -54,15 +54,9 @@ class _AuthPageState extends State<AuthPage> {
   void _completeRegistration(AuthState state) {
     final name = _nameController.text.trim();
     final email = _emailController.text.trim();
-    if (name.isEmpty) {
-      setState(() => _validationError = 'Name is required');
+    if (name.isEmpty || email.isEmpty) {
       return;
     }
-    if (email.isEmpty) {
-      setState(() => _validationError = 'Email is required');
-      return;
-    }
-    setState(() => _validationError = null);
     context.read<AuthBloc>().add(
       AuthOtpRegistrationCompleted(
         name: name,
@@ -75,200 +69,75 @@ class _AuthPageState extends State<AuthPage> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      body: Container(
-        color: AppColors.background,
-        child: SafeArea(
-          child: Align(
-            alignment: Alignment.topCenter,
+      backgroundColor: _pageBackground,
+      body: BlocBuilder<AuthBloc, AuthState>(
+        builder: (context, state) {
+          return Center(
             child: ConstrainedBox(
               constraints: const BoxConstraints(maxWidth: 430),
               child: SingleChildScrollView(
-                padding: const EdgeInsets.fromLTRB(22, 64, 22, 28),
-                child: BlocBuilder<AuthBloc, AuthState>(
-                  builder: (context, state) {
-                    final busy = state.isBusy;
-                    return TweenAnimationBuilder<double>(
-                      tween: Tween(begin: 0, end: 1),
-                      duration: const Duration(milliseconds: 420),
-                      curve: Curves.easeOutCubic,
-                      builder: (context, value, child) => Opacity(
-                        opacity: value,
-                        child: Transform.translate(
-                          offset: Offset(0, 16 * (1 - value)),
-                          child: child,
+                child: Column(
+                  children: [
+                    const _HeroImage(),
+                    Padding(
+                      padding: const EdgeInsets.fromLTRB(25, 40, 25, 34),
+                      child: AnimatedSwitcher(
+                        duration: const Duration(milliseconds: 240),
+                        child: _AuthFields(
+                          key: ValueKey(state.status),
+                          state: state,
+                          phoneController: _phoneController,
+                          otpController: _otpController,
+                          nameController: _nameController,
+                          emailController: _emailController,
+                          onRequestOtp: _requestOtp,
+                          onVerifyOtp: () => _verifyOtp(state),
+                          onCompleteRegistration: () =>
+                              _completeRegistration(state),
+                          onChangePhone: () {
+                            _otpController.clear();
+                            context.read<AuthBloc>().add(
+                              const AuthPhoneChangeRequested(),
+                            );
+                          },
                         ),
                       ),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.stretch,
-                        children: [
-                          _AnimatedShield(status: state.status),
-                          const SizedBox(height: 22),
-                          Text(
-                            'Glazia Home Secure',
-                            textAlign: TextAlign.center,
-                            style: Theme.of(context).textTheme.headlineSmall
-                                ?.copyWith(
-                                  color: AppColors.text,
-                                  fontWeight: FontWeight.w900,
-                                ),
-                          ),
-                          const SizedBox(height: 8),
-                          Text(
-                            _subtitle(state),
-                            textAlign: TextAlign.center,
-                            style: const TextStyle(
-                              color: AppColors.mutedText,
-                              fontWeight: FontWeight.w600,
-                              height: 1.4,
-                            ),
-                          ),
-                          const SizedBox(height: 30),
-                          _AuthPanel(
-                            child: AnimatedSwitcher(
-                              duration: const Duration(milliseconds: 260),
-                              switchInCurve: Curves.easeOutCubic,
-                              switchOutCurve: Curves.easeInCubic,
-                              transitionBuilder: (child, animation) {
-                                return FadeTransition(
-                                  opacity: animation,
-                                  child: SlideTransition(
-                                    position: Tween<Offset>(
-                                      begin: const Offset(0, 0.04),
-                                      end: Offset.zero,
-                                    ).animate(animation),
-                                    child: child,
-                                  ),
-                                );
-                              },
-                              child: _AuthFields(
-                                key: ValueKey(state.status),
-                                state: state,
-                                busy: busy,
-                                phoneController: _phoneController,
-                                otpController: _otpController,
-                                nameController: _nameController,
-                                emailController: _emailController,
-                                onRequestOtp: _requestOtp,
-                                onVerifyOtp: () => _verifyOtp(state),
-                                onCompleteRegistration: () =>
-                                    _completeRegistration(state),
-                              ),
-                            ),
-                          ),
-                          if ((_validationError ?? state.error) != null) ...[
-                            const SizedBox(height: 12),
-                            ErrorBanner(
-                              message: _validationError ?? state.error!,
-                            ),
-                          ],
-                        ],
-                      ),
-                    );
-                  },
+                    ),
+                    const _Footer(),
+                  ],
                 ),
               ),
             ),
-          ),
-        ),
+          );
+        },
       ),
     );
   }
-
-  String _subtitle(AuthState state) {
-    return switch (state.status) {
-      AuthStatus.otpSent => 'Enter the OTP sent to ${state.phoneNumber}.',
-      AuthStatus.registrationRequired =>
-        'Complete registration to secure your home.',
-      _ => 'Sign in or register with phone OTP.',
-    };
-  }
 }
 
-class _AnimatedShield extends StatelessWidget {
-  const _AnimatedShield({required this.status});
-
-  final AuthStatus status;
+class _HeroImage extends StatelessWidget {
+  const _HeroImage();
 
   @override
   Widget build(BuildContext context) {
-    return TweenAnimationBuilder<double>(
-      tween: Tween(begin: 0, end: 1),
-      duration: const Duration(milliseconds: 620),
-      curve: Curves.elasticOut,
-      builder: (context, value, child) {
-        final clamped = value.clamp(0.0, 1.0);
-        return Transform.scale(
-          scale: 0.76 + (0.24 * clamped),
-          child: Opacity(opacity: clamped, child: child),
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final height = constraints.maxWidth * (382 / 390);
+        return ClipRRect(
+          borderRadius: const BorderRadius.vertical(
+            bottom: Radius.circular(22),
+          ),
+          child: SizedBox(
+            width: double.infinity,
+            height: height,
+            child: Image.asset(
+              'assets/images/login.png',
+              fit: BoxFit.fitWidth,
+              alignment: Alignment.topCenter,
+            ),
+          ),
         );
       },
-      child: Center(
-        child: AnimatedContainer(
-          duration: const Duration(milliseconds: 260),
-          curve: Curves.easeOut,
-          width: 78,
-          height: 78,
-          decoration: BoxDecoration(
-            color: AppColors.surface,
-            shape: BoxShape.circle,
-            border: Border.all(color: AppColors.accent.withValues(alpha: 0.28)),
-            boxShadow: [
-              BoxShadow(
-                color: AppColors.button.withValues(alpha: 0.22),
-                blurRadius: 28,
-                offset: const Offset(0, 12),
-              ),
-            ],
-          ),
-          child: Icon(
-            switch (status) {
-              AuthStatus.otpSent => Icons.sms_outlined,
-              AuthStatus.registrationRequired => Icons.person_add_alt,
-              _ => Icons.shield_outlined,
-            },
-            size: 34,
-            color: AppColors.accent,
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-class _AuthPanel extends StatelessWidget {
-  const _AuthPanel({required this.child});
-
-  final Widget child;
-
-  @override
-  Widget build(BuildContext context) {
-    return TweenAnimationBuilder<double>(
-      tween: Tween(begin: 0, end: 1),
-      duration: const Duration(milliseconds: 500),
-      curve: Curves.easeOutCubic,
-      builder: (context, value, child) => Opacity(
-        opacity: value,
-        child: Transform.translate(
-          offset: Offset(0, 18 * (1 - value)),
-          child: child,
-        ),
-      ),
-      child: Container(
-        padding: const EdgeInsets.all(20),
-        decoration: BoxDecoration(
-          color: AppColors.surface,
-          borderRadius: BorderRadius.circular(24),
-          border: Border.all(color: AppColors.border),
-          boxShadow: [
-            BoxShadow(
-              color: Colors.black.withValues(alpha: 0.24),
-              blurRadius: 24,
-              offset: const Offset(0, 14),
-            ),
-          ],
-        ),
-        child: child,
-      ),
     );
   }
 }
@@ -277,7 +146,6 @@ class _AuthFields extends StatelessWidget {
   const _AuthFields({
     super.key,
     required this.state,
-    required this.busy,
     required this.phoneController,
     required this.otpController,
     required this.nameController,
@@ -285,10 +153,10 @@ class _AuthFields extends StatelessWidget {
     required this.onRequestOtp,
     required this.onVerifyOtp,
     required this.onCompleteRegistration,
+    required this.onChangePhone,
   });
 
   final AuthState state;
-  final bool busy;
   final TextEditingController phoneController;
   final TextEditingController otpController;
   final TextEditingController nameController;
@@ -296,178 +164,527 @@ class _AuthFields extends StatelessWidget {
   final VoidCallback onRequestOtp;
   final VoidCallback onVerifyOtp;
   final VoidCallback onCompleteRegistration;
+  final VoidCallback onChangePhone;
 
   @override
   Widget build(BuildContext context) {
     if (state.status == AuthStatus.registrationRequired) {
       phoneController.text = state.phoneNumber;
-      return Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
+      return _FormSection(
+        title: 'Create profile',
+        subtitle: 'Add your details to finish securing your home.',
         children: [
-          Text(
-            'Create profile',
-            style: Theme.of(context).textTheme.titleLarge?.copyWith(
-              color: AppColors.text,
-              fontWeight: FontWeight.w900,
-            ),
-          ),
-          const SizedBox(height: 6),
-          const Text(
-            'Add your details to complete the verified phone login.',
-            style: TextStyle(color: AppColors.mutedText, height: 1.35),
-          ),
-          const SizedBox(height: 20),
-          TextField(
+          _LabeledField(
+            label: 'NAME',
             controller: nameController,
-            decoration: const InputDecoration(
-              labelText: 'Name',
-              prefixIcon: Icon(Icons.person_outline),
-            ),
+            hint: 'Your name',
+            icon: Icons.person_outline,
           ),
-          const SizedBox(height: 12),
-          TextField(
+          _LabeledField(
+            label: 'EMAIL',
             controller: emailController,
+            hint: 'Email address',
+            icon: Icons.mail_outline,
             keyboardType: TextInputType.emailAddress,
-            decoration: const InputDecoration(
-              labelText: 'Email',
-              prefixIcon: Icon(Icons.mail_outline),
-            ),
           ),
-          const SizedBox(height: 12),
-          TextField(
+          _LabeledField(
+            label: 'PHONE NUMBER',
             controller: phoneController,
+            hint: state.phoneNumber,
+            icon: Icons.phone_outlined,
             readOnly: true,
-            decoration: const InputDecoration(
-              labelText: 'Phone number',
-              prefixIcon: Icon(Icons.phone_outlined),
-            ),
           ),
-          const SizedBox(height: 16),
-          AppButton(
-            loading: busy,
-            onPressed: onCompleteRegistration,
-            icon: Icons.person_add_alt,
+          _MetalButton(
+            loading: state.isBusy,
             label: 'Complete registration',
+            icon: Icons.person_add_alt_1_outlined,
+            onPressed: onCompleteRegistration,
           ),
         ],
       );
     }
 
     if (state.status == AuthStatus.otpSent ||
-        busy && state.phoneNumber.isNotEmpty) {
-      return Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
+        state.isBusy && state.phoneNumber.isNotEmpty) {
+      return _FormSection(
+        title: 'Enter OTP',
+        subtitle: 'Enter the code sent to ${state.phoneNumber}.',
         children: [
-          Text(
-            'Enter OTP',
-            style: Theme.of(context).textTheme.titleLarge?.copyWith(
-              color: AppColors.text,
-              fontWeight: FontWeight.w900,
-            ),
-          ),
-          const SizedBox(height: 6),
-          Text(
-            'Code sent to ${state.phoneNumber}',
-            style: const TextStyle(color: AppColors.mutedText, height: 1.35),
-          ),
-          if (state.devOtp != null) ...[
-            const SizedBox(height: 14),
-            _DevOtpCard(otp: state.devOtp!),
-          ],
-          const SizedBox(height: 16),
-          TextField(
-            controller: otpController,
-            keyboardType: TextInputType.number,
-            decoration: const InputDecoration(
-              labelText: 'OTP',
-              prefixIcon: Icon(Icons.password_outlined),
-            ),
-          ),
-          const SizedBox(height: 16),
-          AppButton(
-            loading: busy,
-            onPressed: onVerifyOtp,
-            icon: Icons.verified_outlined,
+          _OtpCodeField(controller: otpController, enabled: !state.isBusy),
+          const SizedBox(height: 18),
+          _MetalButton(
+            loading: state.isBusy,
             label: 'Verify OTP',
+            icon: Icons.check_circle_outline,
+            onPressed: onVerifyOtp,
           ),
+          const SizedBox(height: 18),
           TextButton(
-            onPressed: busy ? null : onRequestOtp,
-            child: const Text('Resend code'),
+            onPressed: state.isBusy ? null : onRequestOtp,
+            child: const Text(
+              'Resend code',
+              style: TextStyle(
+                color: _textPrimary,
+                fontFamily: 'Inter',
+                fontSize: 14,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+          ),
+          const SizedBox(height: 23),
+          Align(
+            alignment: Alignment.centerLeft,
+            child: TextButton.icon(
+              onPressed: state.isBusy ? null : onChangePhone,
+              style: TextButton.styleFrom(
+                foregroundColor: _textPrimary,
+                padding: EdgeInsets.zero,
+              ),
+              icon: const Icon(Icons.arrow_back, size: 22),
+              label: const Text(
+                'Change phone number',
+                style: TextStyle(
+                  fontFamily: 'Inter',
+                  fontSize: 14,
+                  fontWeight: FontWeight.w400,
+                ),
+              ),
+            ),
           ),
         ],
       );
     }
 
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
+    return _FormSection(
+      title: 'Sign in',
+      subtitle: 'Enter your phone number to continue with OTP.',
       children: [
-        Text(
-          'Login',
-          style: Theme.of(context).textTheme.titleLarge?.copyWith(
-            color: AppColors.text,
-            fontWeight: FontWeight.w900,
-          ),
-        ),
-        const SizedBox(height: 6),
-        const Text(
-          'Enter your phone number to continue with OTP.',
-          style: TextStyle(color: AppColors.mutedText, height: 1.35),
-        ),
-        const SizedBox(height: 20),
-        TextField(
+        _LabeledField(
+          label: 'PHONE NUMBER',
           controller: phoneController,
+          hint: 'Phone number',
+          prefixText: '+91  •  ',
+          icon: Icons.phone_outlined,
           keyboardType: TextInputType.phone,
-          decoration: const InputDecoration(
-            labelText: 'Phone number',
-            prefixIcon: Icon(Icons.phone_outlined),
+        ),
+        const Padding(
+          padding: EdgeInsets.only(top: 1, bottom: 17),
+          child: Text(
+            'A one-time code will be sent to this number.',
+            style: TextStyle(color: _textSecondary, fontSize: 11),
           ),
         ),
-        const SizedBox(height: 16),
-        AppButton(
-          loading: busy,
-          onPressed: onRequestOtp,
-          icon: Icons.sms_outlined,
+        _MetalButton(
+          loading: state.isBusy,
           label: 'Send OTP',
+          icon: Icons.chat_bubble_outline,
+          onPressed: onRequestOtp,
         ),
       ],
     );
   }
 }
 
-class _DevOtpCard extends StatelessWidget {
-  const _DevOtpCard({required this.otp});
+class _OtpCodeField extends StatefulWidget {
+  const _OtpCodeField({required this.controller, required this.enabled});
 
-  final String otp;
+  final TextEditingController controller;
+  final bool enabled;
+
+  @override
+  State<_OtpCodeField> createState() => _OtpCodeFieldState();
+}
+
+class _OtpCodeFieldState extends State<_OtpCodeField> {
+  final _focusNode = FocusNode();
+
+  @override
+  void initState() {
+    super.initState();
+    widget.controller.addListener(_refresh);
+    _focusNode.addListener(_refresh);
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted && widget.enabled) _focusNode.requestFocus();
+    });
+  }
+
+  @override
+  void didUpdateWidget(covariant _OtpCodeField oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.controller != widget.controller) {
+      oldWidget.controller.removeListener(_refresh);
+      widget.controller.addListener(_refresh);
+    }
+  }
+
+  void _refresh() => setState(() {});
+
+  @override
+  void dispose() {
+    widget.controller.removeListener(_refresh);
+    _focusNode.removeListener(_refresh);
+    _focusNode.dispose();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
-    return AnimatedContainer(
-      duration: const Duration(milliseconds: 220),
-      curve: Curves.easeOut,
-      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
-      decoration: BoxDecoration(
-        color: AppColors.button.withValues(alpha: 0.18),
-        borderRadius: BorderRadius.circular(18),
-        border: Border.all(color: AppColors.accent.withValues(alpha: 0.34)),
-      ),
-      child: Row(
+    final code = widget.controller.text;
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const Text(
+          'VERIFICATION CODE',
+          style: TextStyle(
+            color: _textPrimary,
+            fontFamily: 'IBM Plex Mono',
+            fontSize: 12,
+            height: 16 / 12,
+            fontWeight: FontWeight.w600,
+            letterSpacing: .96,
+          ),
+        ),
+        const SizedBox(height: 12),
+        GestureDetector(
+          onTap: widget.enabled ? _focusNode.requestFocus : null,
+          child: Stack(
+            children: [
+              Row(
+                children: List.generate(6, (index) {
+                  final hasValue = index < code.length;
+                  final selected = _focusNode.hasFocus && index == code.length;
+                  return Expanded(
+                    child: Padding(
+                      padding: EdgeInsets.only(right: index == 5 ? 0 : 8),
+                      child: _GlassBox(
+                        height: 49,
+                        borderRadius: 6,
+                        borderColor: selected
+                            ? AppColors.accent.withValues(alpha: .78)
+                            : Colors.white.withValues(alpha: .22),
+                        borderWidth: selected ? 1.2 : .8,
+                        alignment: Alignment.center,
+                        child: Text(
+                          hasValue ? code[index] : '',
+                          style: const TextStyle(
+                            color: _textPrimary,
+                            fontFamily: 'IBM Plex Mono',
+                            fontSize: 20,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                      ),
+                    ),
+                  );
+                }),
+              ),
+              Positioned.fill(
+                child: Opacity(
+                  opacity: 0,
+                  child: TextField(
+                    controller: widget.controller,
+                    focusNode: _focusNode,
+                    enabled: widget.enabled,
+                    autofocus: true,
+                    keyboardType: TextInputType.number,
+                    textInputAction: TextInputAction.done,
+                    maxLength: 6,
+                    inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+                    decoration: const InputDecoration(counterText: ''),
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+class _FormSection extends StatelessWidget {
+  const _FormSection({
+    required this.title,
+    required this.subtitle,
+    required this.children,
+  });
+
+  final String title;
+  final String subtitle;
+  final List<Widget> children;
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Text(
+          title,
+          style: const TextStyle(
+            color: _textPrimary,
+            fontSize: 24,
+            height: 30 / 24,
+            fontFamily: 'Space Grotesk',
+            fontWeight: FontWeight.w600,
+          ),
+        ),
+        const SizedBox(height: 7),
+        Text(
+          subtitle,
+          style: const TextStyle(
+            color: _textSecondary,
+            fontFamily: 'Inter',
+            fontSize: 14,
+            height: 22 / 14,
+          ),
+        ),
+        const SizedBox(height: 19),
+        ...children,
+      ],
+    );
+  }
+}
+
+class _LabeledField extends StatelessWidget {
+  const _LabeledField({
+    required this.label,
+    required this.controller,
+    required this.hint,
+    required this.icon,
+    this.keyboardType,
+    this.readOnly = false,
+    this.prefixText,
+  });
+
+  final String label;
+  final TextEditingController controller;
+  final String hint;
+  final IconData icon;
+  final TextInputType? keyboardType;
+  final bool readOnly;
+  final String? prefixText;
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 13),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Icon(Icons.developer_mode_outlined, color: AppColors.accent),
-          const SizedBox(width: 10),
-          const Expanded(
-            child: Text(
-              'Development OTP',
-              style: TextStyle(
-                color: AppColors.text,
-                fontWeight: FontWeight.w800,
+          Text(
+            label,
+            style: const TextStyle(
+              color: _textPrimary,
+              fontFamily: 'IBM Plex Mono',
+              fontSize: 12,
+              height: 16 / 12,
+              fontWeight: FontWeight.w600,
+              letterSpacing: .96,
+            ),
+          ),
+          const SizedBox(height: 10),
+          _GlassBox(
+            height: 49,
+            borderColor: Colors.white.withValues(alpha: .24),
+            child: TextField(
+              controller: controller,
+              keyboardType: keyboardType,
+              readOnly: readOnly,
+              style: const TextStyle(
+                color: _textPrimary,
+                fontFamily: 'Inter',
+                fontSize: 16,
+                height: 26 / 16,
+              ),
+              decoration: InputDecoration(
+                hintText: hint,
+                prefixText: prefixText,
+                prefixStyle: const TextStyle(
+                  color: _textPrimary,
+                  fontFamily: 'Inter',
+                  fontSize: 16,
+                  height: 26 / 16,
+                ),
+                hintStyle: const TextStyle(
+                  color: _textSecondary,
+                  fontFamily: 'Inter',
+                  fontSize: 16,
+                ),
+                prefixIcon: Icon(icon, color: _textPrimary, size: 23),
+                filled: false,
+                contentPadding: const EdgeInsets.symmetric(vertical: 13),
+                border: InputBorder.none,
+                enabledBorder: InputBorder.none,
+                focusedBorder: InputBorder.none,
               ),
             ),
           ),
+        ],
+      ),
+    );
+  }
+}
+
+class _GlassBox extends StatelessWidget {
+  const _GlassBox({
+    required this.child,
+    required this.height,
+    required this.borderColor,
+    this.borderRadius = 5,
+    this.borderWidth = .8,
+    this.alignment,
+  });
+
+  final Widget child;
+  final double height;
+  final Color borderColor;
+  final double borderRadius;
+  final double borderWidth;
+  final AlignmentGeometry? alignment;
+
+  @override
+  Widget build(BuildContext context) {
+    final radius = BorderRadius.circular(borderRadius);
+
+    return Container(
+      height: height,
+      decoration: BoxDecoration(
+        borderRadius: radius,
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: .22),
+            blurRadius: 14,
+            offset: const Offset(0, 7),
+          ),
+          BoxShadow(
+            color: Colors.white.withValues(alpha: .035),
+            blurRadius: 8,
+            offset: const Offset(0, -2),
+          ),
+        ],
+      ),
+      child: ClipRRect(
+        borderRadius: radius,
+        child: BackdropFilter(
+          filter: ImageFilter.blur(sigmaX: 12, sigmaY: 12),
+          child: Container(
+            alignment: alignment,
+            decoration: BoxDecoration(
+              borderRadius: radius,
+              border: Border.all(color: borderColor, width: borderWidth),
+              gradient: LinearGradient(
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
+                colors: [
+                  Colors.white.withValues(alpha: .105),
+                  AppColors.inputFill.withValues(alpha: .48),
+                  Colors.white.withValues(alpha: .035),
+                ],
+                stops: const [0, .52, 1],
+              ),
+            ),
+            child: child,
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _MetalButton extends StatelessWidget {
+  const _MetalButton({
+    required this.loading,
+    required this.label,
+    required this.icon,
+    required this.onPressed,
+  });
+
+  final bool loading;
+  final String label;
+  final IconData icon;
+  final VoidCallback onPressed;
+
+  @override
+  Widget build(BuildContext context) {
+    return DecoratedBox(
+      decoration: BoxDecoration(
+        gradient: const LinearGradient(
+          begin: Alignment.topCenter,
+          end: Alignment.bottomCenter,
+          colors: [AppColors.disabled, AppColors.divider],
+        ),
+        borderRadius: BorderRadius.circular(5),
+        border: Border.all(color: AppColors.mutedText, width: .7),
+      ),
+      child: SizedBox(
+        height: 49,
+        child: TextButton(
+          onPressed: loading ? null : onPressed,
+          style: TextButton.styleFrom(
+            foregroundColor: Colors.white,
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(5),
+            ),
+          ),
+          child: loading
+              ? const SizedBox.square(
+                  dimension: 20,
+                  child: CircularProgressIndicator(
+                    strokeWidth: 2,
+                    color: Colors.white,
+                  ),
+                )
+              : Row(
+                  children: [
+                    Icon(icon, size: 21),
+                    Expanded(
+                      child: Text(
+                        label,
+                        textAlign: TextAlign.center,
+                        style: const TextStyle(
+                          fontFamily: 'IBM Plex Mono',
+                          fontSize: 12,
+                          fontWeight: FontWeight.w600,
+                          letterSpacing: .96,
+                        ),
+                      ),
+                    ),
+                    const Icon(Icons.arrow_forward, size: 20),
+                  ],
+                ),
+        ),
+      ),
+    );
+  }
+}
+
+class _Footer extends StatelessWidget {
+  const _Footer();
+
+  @override
+  Widget build(BuildContext context) {
+    return const Padding(
+      padding: EdgeInsets.fromLTRB(25, 108, 25, 37),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        children: [
           Text(
-            otp,
-            style: Theme.of(context).textTheme.titleMedium?.copyWith(
-              color: Colors.white,
-              fontWeight: FontWeight.w900,
+            'GLAZIA',
+            style: TextStyle(
+              color: AppColors.text,
+              fontSize: 17,
+              fontFamily: 'Space Grotesk',
+              fontWeight: FontWeight.w700,
+              letterSpacing: 3,
+            ),
+          ),
+          Text(
+            'SECURE LIVING, SIMPLIFIED',
+            style: TextStyle(
+              color: AppColors.mutedText,
+              fontFamily: 'IBM Plex Mono',
+              fontSize: 7,
             ),
           ),
         ],

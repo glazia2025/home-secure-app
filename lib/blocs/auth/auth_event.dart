@@ -58,6 +58,10 @@ class AuthOtpRequested extends AuthEvent {
   List<Object?> get props => [phoneNumber];
 }
 
+class AuthPhoneChangeRequested extends AuthEvent {
+  const AuthPhoneChangeRequested();
+}
+
 class AuthOtpVerified extends AuthEvent {
   const AuthOtpVerified({required this.phoneNumber, required this.otp});
 

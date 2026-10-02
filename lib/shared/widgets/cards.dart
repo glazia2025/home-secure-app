@@ -143,11 +143,11 @@ class ErrorBanner extends StatelessWidget {
       width: double.infinity,
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
-        color: const Color(0xFF3A1625),
+        color: AppColors.error.withValues(alpha: 0.16),
         borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: const Color(0xFF7F1D3A)),
+        border: Border.all(color: AppColors.error),
       ),
-      child: Text(message, style: const TextStyle(color: Color(0xFFFFB4C8))),
+      child: Text(message, style: const TextStyle(color: AppColors.error)),
     );
   }
 }
@@ -189,16 +189,16 @@ class StatusPill extends StatelessWidget {
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
       decoration: BoxDecoration(
         color: isOnline
-            ? const Color(0xFF103A26)
+            ? AppColors.success.withValues(alpha: 0.18)
             : isOffline
-            ? const Color(0xFF3A1625)
+            ? AppColors.error.withValues(alpha: 0.16)
             : AppColors.surfaceElevated,
         borderRadius: BorderRadius.circular(999),
         border: Border.all(
           color: isOnline
-              ? const Color(0xFF7DDE9E).withValues(alpha: 0.35)
+              ? AppColors.success.withValues(alpha: 0.35)
               : isOffline
-              ? const Color(0xFFFF8A9A).withValues(alpha: 0.35)
+              ? AppColors.error.withValues(alpha: 0.35)
               : AppColors.border,
         ),
       ),
@@ -206,9 +206,9 @@ class StatusPill extends StatelessWidget {
         label.isEmpty ? 'unknown' : label,
         style: TextStyle(
           color: isOnline
-              ? const Color(0xFF7DDE9E)
+              ? AppColors.success
               : isOffline
-              ? const Color(0xFFFF8A9A)
+              ? AppColors.error
               : AppColors.primary,
           fontWeight: FontWeight.w700,
           fontSize: 12,

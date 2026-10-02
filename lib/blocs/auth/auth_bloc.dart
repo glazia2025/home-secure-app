@@ -16,6 +16,7 @@ class AuthBloc extends Bloc<AuthEvent, AuthState> {
     on<AuthLogoutRequested>(_onLogoutRequested);
     on<AuthBaseUrlChanged>(_onBaseUrlChanged);
     on<AuthOtpRequested>(_onOtpRequested);
+    on<AuthPhoneChangeRequested>(_onPhoneChangeRequested);
     on<AuthOtpVerified>(_onOtpVerified);
     on<AuthOtpRegistrationCompleted>(_onOtpRegistrationCompleted);
   }
@@ -149,6 +150,13 @@ class AuthBloc extends Bloc<AuthEvent, AuthState> {
         ),
       );
     }
+  }
+
+  void _onPhoneChangeRequested(
+    AuthPhoneChangeRequested event,
+    Emitter<AuthState> emit,
+  ) {
+    emit(AuthState(status: AuthStatus.unauthenticated, baseUrl: state.baseUrl));
   }
 
   Future<void> _onOtpVerified(

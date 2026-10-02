@@ -26,7 +26,7 @@ class _AppScaffoldState extends State<AppScaffold> {
       builder: (context, dashboard) {
         return Scaffold(
           appBar: AppBar(
-            title: const Text('Glazia Home Secure'),
+            title: const Text('Glazia Home'),
             actions: [
               IconButton(
                 tooltip: 'Refresh',

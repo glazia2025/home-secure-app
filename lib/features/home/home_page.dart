@@ -989,7 +989,7 @@ class _SensorManualToggleTileState extends State<SensorManualToggleTile> {
         borderRadius: BorderRadius.circular(20),
         border: Border.all(
           color: online
-              ? const Color(0xFF7DDE9E).withValues(alpha: 0.22)
+              ? AppColors.success.withValues(alpha: 0.22)
               : AppColors.border,
         ),
       ),
@@ -999,12 +999,14 @@ class _SensorManualToggleTileState extends State<SensorManualToggleTile> {
             width: 44,
             height: 44,
             decoration: BoxDecoration(
-              color: online ? const Color(0xFF103A26) : AppColors.softAccent,
+              color: online
+                  ? AppColors.success.withValues(alpha: 0.18)
+                  : AppColors.softAccent,
               borderRadius: BorderRadius.circular(16),
             ),
             child: Icon(
               Icons.sensors_outlined,
-              color: online ? const Color(0xFF7DDE9E) : AppColors.accent,
+              color: online ? AppColors.success : AppColors.accent,
             ),
           ),
           const SizedBox(width: 12),
@@ -1085,7 +1087,7 @@ Future<bool> _confirmDestructiveAction(
             ),
             FilledButton(
               style: FilledButton.styleFrom(
-                backgroundColor: const Color(0xFFE5484D),
+                backgroundColor: AppColors.error,
                 foregroundColor: Colors.white,
               ),
               onPressed: () => Navigator.of(context).pop(true),

@@ -202,13 +202,13 @@ class _SensorRuleTile extends StatelessWidget {
             height: 42,
             decoration: BoxDecoration(
               color: rule.enabled
-                  ? const Color(0xFF103A26)
+                  ? AppColors.success.withValues(alpha: 0.18)
                   : AppColors.softAccent,
               borderRadius: BorderRadius.circular(16),
             ),
             child: Icon(
               Icons.sensors_outlined,
-              color: rule.enabled ? const Color(0xFF7DDE9E) : AppColors.accent,
+              color: rule.enabled ? AppColors.success : AppColors.accent,
             ),
           ),
           title: Text(

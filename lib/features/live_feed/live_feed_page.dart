@@ -24,6 +24,7 @@ class _LiveFeedPageState extends State<LiveFeedPage> {
   LiveFeedSignalingSession? _signaling;
   StreamSubscription<Map<String, dynamic>>? _signalSubscription;
   RTCPeerConnection? _peerConnection;
+  Timer? _relayFallbackTimer;
   final List<RTCIceCandidate> _pendingCandidates = <RTCIceCandidate>[];
   Object? _error;
   String _status = 'connecting';
@@ -50,7 +51,7 @@ class _LiveFeedPageState extends State<LiveFeedPage> {
     super.dispose();
   }
 
-  Future<void> _connect() async {
+  Future<void> _connect({bool relayOnly = false}) async {
     final generation = ++_connectionGeneration;
     final repository = context.read<AppRepository>();
     await _closeConnection();
@@ -77,6 +78,7 @@ class _LiveFeedPageState extends State<LiveFeedPage> {
             'credential': 'xio@1234',
           },
         ],
+        if (relayOnly) 'iceTransportPolicy': 'relay',
         'sdpSemantics': 'unified-plan',
       });
       if (_disposed || generation != _connectionGeneration) {
@@ -105,9 +107,15 @@ class _LiveFeedPageState extends State<LiveFeedPage> {
         if (!mounted || _disposed || generation != _connectionGeneration) {
           return;
         }
+        if (state == RTCPeerConnectionState.RTCPeerConnectionStateFailed &&
+            !relayOnly) {
+          _retryWithRelay(generation);
+          return;
+        }
         setState(() {
           switch (state) {
             case RTCPeerConnectionState.RTCPeerConnectionStateConnected:
+              _relayFallbackTimer?.cancel();
               _status = 'live';
             case RTCPeerConnectionState.RTCPeerConnectionStateFailed:
               _status = 'offline';
@@ -127,7 +135,7 @@ class _LiveFeedPageState extends State<LiveFeedPage> {
       }
       _signaling = signaling;
       _signalSubscription = signaling.messages.listen(
-        (message) => _handleSignal(message, generation),
+        (message) => _handleSignal(message, generation, relayOnly),
         onError: (Object error) => _setFailure(error, generation),
         onDone: () => _setFailure('Signaling connection closed', generation),
         cancelOnError: true,
@@ -140,6 +148,7 @@ class _LiveFeedPageState extends State<LiveFeedPage> {
   Future<void> _handleSignal(
     Map<String, dynamic> message,
     int generation,
+    bool relayOnly,
   ) async {
     if (_disposed || generation != _connectionGeneration) return;
     try {
@@ -170,6 +179,13 @@ class _LiveFeedPageState extends State<LiveFeedPage> {
             'type': 'answer',
             'sdp': answer.toMap(),
           });
+          if (!relayOnly) {
+            _relayFallbackTimer?.cancel();
+            _relayFallbackTimer = Timer(
+              const Duration(seconds: 10),
+              () => _retryWithRelay(generation),
+            );
+          }
           if (mounted) setState(() => _status = 'connecting');
         case 'ice-candidate':
           final json = _map(message['candidate']);
@@ -199,6 +215,13 @@ class _LiveFeedPageState extends State<LiveFeedPage> {
     return value is Map ? Map<String, dynamic>.from(value) : null;
   }
 
+  void _retryWithRelay(int generation) {
+    if (_disposed || generation != _connectionGeneration) return;
+    _relayFallbackTimer?.cancel();
+    _relayFallbackTimer = null;
+    unawaited(_connect(relayOnly: true));
+  }
+
   void _setFailure(Object error, int generation) {
     if (!mounted || _disposed || generation != _connectionGeneration) return;
     setState(() {
@@ -208,6 +231,8 @@ class _LiveFeedPageState extends State<LiveFeedPage> {
   }
 
   Future<void> _closeConnection() async {
+    _relayFallbackTimer?.cancel();
+    _relayFallbackTimer = null;
     await _signalSubscription?.cancel();
     _signalSubscription = null;
     await _signaling?.close();
@@ -281,7 +306,7 @@ class _LiveFeedPageState extends State<LiveFeedPage> {
                   label: 'Reconnect',
                   icon: Icons.refresh,
                   outlined: true,
-                  onPressed: _connect,
+                  onPressed: () => _connect(),
                 ),
               ],
             ),

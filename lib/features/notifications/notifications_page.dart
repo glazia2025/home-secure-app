@@ -204,12 +204,12 @@ class _SwipeableAlertCardState extends State<_SwipeableAlertCard> {
             child: Container(
               alignment: Alignment.centerRight,
               padding: const EdgeInsets.only(right: 8),
-              color: const Color(0xFF4B1020),
+              color: AppColors.error.withValues(alpha: 0.18),
               child: IconButton(
                 tooltip: 'Delete alert',
                 onPressed: widget.onDelete,
                 icon: const Icon(Icons.delete_outline),
-                color: const Color(0xFFFF6B8A),
+                color: AppColors.error,
               ),
             ),
           ),
@@ -310,8 +310,8 @@ class _AlertCard extends StatelessWidget {
 
   Color _severityColor(String severity) {
     return switch (severity) {
-      'critical' => const Color(0xFFFF5A6C),
-      'warning' => const Color(0xFFFFB84D),
+      'critical' => AppColors.error,
+      'warning' => AppColors.warning,
       _ => AppColors.accent,
     };
   }
